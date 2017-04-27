@@ -3634,6 +3634,22 @@ gf_skip_header_section (int fd, int header_len)
 }
 
 gf_boolean_t
+gf_is_pid_running (int pid)
+{
+        char fname[32] = {0,};
+
+        snprintf(fname, sizeof(fname), "/proc/%d/cmdline", pid);
+
+        if (access (fname , R_OK) != 0) {
+                return _gf_false;
+        }
+
+        return _gf_true;
+
+}
+
+
+gf_boolean_t
 gf_is_service_running (char *pidfile, int *pid)
 {
         FILE            *file = NULL;
@@ -3668,7 +3684,10 @@ gf_is_service_running (char *pidfile, int *pid)
                  * glusterd_brick_start.
                  */
                 running = _gf_true;
+                goto out;
         }
+        if (gf_is_pid_running (*pid))
+                running = _gf_true;
 
 out:
         if (file)

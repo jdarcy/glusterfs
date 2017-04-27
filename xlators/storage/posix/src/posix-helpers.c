@@ -51,6 +51,7 @@
 #include "hashfn.h"
 #include "glusterfs-acl.h"
 #include "events.h"
+#include <sys/types.h>
 
 char *marker_xattrs[] = {"trusted.glusterfs.quota.*",
                          "trusted.glusterfs.*.xtime",
@@ -1841,6 +1842,9 @@ posix_health_check_thread_proc (void *data)
         struct posix_private *priv               = NULL;
         uint32_t              interval           = 0;
         int                   ret                = -1;
+        xlator_t                *top             = NULL;
+        xlator_list_t           **trav_p         = NULL;
+        int                     count            = 0;
 
         this = data;
         priv = this->private;
@@ -1852,7 +1856,24 @@ posix_health_check_thread_proc (void *data)
 
         gf_msg_debug (this->name, 0, "health-check thread started, "
                 "interval = %d seconds", interval);
+/*
+        if (this->ctx->active) {
+                top = this->ctx->active->first;
+                for (trav_p = &top->children; *trav_p; trav_p = &(*trav_p)->next) {
+                        count++;
+                }
+        }
+        if (count > 1) {
+                gf_msg ("MY_POSIX", GF_LOG_INFO, 0, P_MSG_HEALTHCHECK_FAILED,
+                        "brick_mux is enabled count is %d pid is %d",
+                         count, (int)getpid());
 
+        } else {
+                gf_msg ("MY_POSIX", GF_LOG_INFO, 0, P_MSG_HEALTHCHECK_FAILED,
+                        "brick_mux is not enabled count is %d pid is %d",
+                         count, (int)getpid());
+        }
+*/
         while (1) {
                 /* aborting sleep() is a request to exit this thread, sleep()
                  * will normally not return when cancelled */
@@ -1888,19 +1909,38 @@ abort:
                 "health-check failed, going down");
 
         xlator_notify (this->parents->xlator, GF_EVENT_CHILD_DOWN, this);
+        if (this->ctx->active) {
+                top = this->ctx->active->first;
+                for (trav_p = &top->children; *trav_p; trav_p = &(*trav_p)->next) {
+                        count++;
+                }
+        }
+        if (count > 1) {
+                gf_msg ("MY_POSIX", GF_LOG_INFO, 0, P_MSG_HEALTHCHECK_FAILED,
+                        "brick_mux is enabled count is %d pid is %d",
+                         count, (int)getpid());
+
+        } else {
+                gf_msg ("MY_POSIX", GF_LOG_INFO, 0, P_MSG_HEALTHCHECK_FAILED,
+                        "brick_mux is not enabled count is %d pid is %d",
+                         count, (int)getpid());
+        }
+
 
         ret = sleep (30);
         if (ret == 0) {
                 gf_msg (this->name, GF_LOG_EMERG, 0, P_MSG_HEALTHCHECK_FAILED,
                         "still alive! -> SIGTERM");
-                kill (getpid(), SIGTERM);
+                if (count == 1)
+                        kill (getpid(), SIGTERM);
         }
 
         ret = sleep (30);
         if (ret == 0) {
                 gf_msg (this->name, GF_LOG_EMERG, 0, P_MSG_HEALTHCHECK_FAILED,
                         "still alive! -> SIGKILL");
-                kill (getpid(), SIGKILL);
+                if (count == 1)
+                        kill (getpid(), SIGKILL);
         }
 
         return NULL;
